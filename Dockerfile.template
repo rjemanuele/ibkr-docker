@@ -10,7 +10,14 @@ RUN apt-get update && \
     libasound2 \
     libnss3 \
     libgbm1 \
-    libnspr4
+    libnspr4 \
+    # PulseAudio for audio transport to remote server
+    pulseaudio \
+    pulseaudio-utils \
+    libasound2-plugins \
+    # Icecast2 HTTP streaming server and ffmpeg encoder
+    ffmpeg \
+    icecast2
 
 # Setup noVNC for browser VNC access
 RUN git clone --depth 1 https://github.com/novnc/noVNC.git && \
@@ -39,12 +46,19 @@ RUN wget2 "https://github.com/extrange/ibkr-docker/releases/download/${VERSION}-
     && yes '' | "./$INSTALL_FILENAME"  \
     && rm "$INSTALL_FILENAME"
 
-# Copy scripts
+# Copy scripts and Icecast config template
 COPY image-files/start.sh image-files/replace.sh /
+COPY image-files/icecast.xml.tmpl /etc/icecast2/icecast.xml.tmpl
 COPY image-files/root/ /root/
 
 RUN mkdir -p ~/ibc && mv /opt/ibc/config.ini ~/ibc/config.ini
 
 RUN chmod a+x ./*.sh /opt/ibc/*.sh /opt/ibc/scripts/*.sh
+
+# Route ALSA audio through PulseAudio so Java/TWS audio uses PulseAudio
+RUN printf 'pcm.!default {\n    type pulse\n}\nctl.!default {\n    type pulse\n}\n' > /etc/asound.conf
+
+# Disable PulseAudio autospawn — start.sh manages the daemon manually
+RUN printf 'autospawn = no\ndaemon-binary = /usr/bin/pulseaudio\n' > /etc/pulse/client.conf
 
 CMD [ "/start.sh" ]

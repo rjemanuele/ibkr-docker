@@ -31,6 +31,88 @@ if [ -f "$HOME/.config/openbox/rc.xml" ]; then
 fi
 openbox-session "${opts[@]}" &
 
+# Start PulseAudio if PULSE_SERVER or ICECAST_PASSWORD is set.
+#
+# PULSE_SERVER: forward audio to a remote PulseAudio server over TCP.
+#   On the remote machine, enable TCP access with:
+#     pactl load-module module-native-protocol-tcp auth-anonymous=1
+#   Then set PULSE_SERVER=tcp:<remote-host>:4713 when running this container.
+#
+# ICECAST_ENABLED: expose an Icecast HTTP streaming endpoint on port 8000.
+#   Stream URL: http://<host>:8000/stream.mp3
+#
+# The fallback null-sink is always the default output; audio reaches the tunnel
+# via a loopback module rather than by switching the default sink.
+if [[ -n "${PULSE_SERVER:-}" || -n "${ICECAST_ENABLED:-}" ]]; then
+    pulseaudio --start --exit-idle-time=-1 --log-level=notice
+
+    # Null sink as permanent default — gives TWS a stable audio device and
+    # provides the monitor source for Icecast and the tunnel loopback.
+    pactl load-module module-null-sink sink_name=fallback \
+        sink_properties=device.description=Fallback
+    pactl set-default-sink fallback
+
+    if [[ -n "${PULSE_SERVER:-}" ]]; then
+        printf "PulseAudio: forwarding audio to %s\n" "${PULSE_SERVER}"
+        (
+            LOOPBACK_MODULE=
+            while true; do
+                if pactl list short sinks 2>/dev/null | grep -q tunnel; then
+                    sleep 30
+                    continue
+                fi
+                # Tunnel gone — drop any orphaned loopback before reconnecting
+                if [[ -n "${LOOPBACK_MODULE:-}" ]]; then
+                    pactl unload-module "$LOOPBACK_MODULE" 2>/dev/null || true
+                    LOOPBACK_MODULE=
+                fi
+                printf "PulseAudio: attempting tunnel connection to %s\n" "${PULSE_SERVER}"
+                if pactl load-module module-tunnel-sink server="${PULSE_SERVER}" 2>/dev/null; then
+                    for i in $(seq 1 20); do
+                        TUNNEL_SINK=$(pactl list short sinks 2>/dev/null | awk '/tunnel/{print $2; exit}')
+                        [[ -n "$TUNNEL_SINK" ]] && break
+                        sleep 0.5
+                    done
+                    if [[ -n "${TUNNEL_SINK:-}" ]]; then
+                        LOOPBACK_MODULE=$(pactl load-module module-loopback \
+                            source=fallback.monitor sink="$TUNNEL_SINK" \
+                            latency_msec=200 2>/dev/null) || true
+                        printf "PulseAudio: loopback to tunnel sink '%s' established\n" "$TUNNEL_SINK"
+                    fi
+                else
+                    printf "PulseAudio: tunnel connection failed, retrying in 10s\n"
+                    sleep 10
+                fi
+            done
+        ) &
+    fi
+
+    if [[ -n "${ICECAST_ENABLED:-}" ]]; then
+        printf "Icecast: starting streaming server on port 8000\n"
+        mkdir -p /var/log/icecast2 /var/run/icecast2
+        chown icecast2:icecast /var/log/icecast2 /var/run/icecast2
+        cp /etc/icecast2/icecast.xml.tmpl /etc/icecast2/icecast.xml
+        icecast2 -c /etc/icecast2/icecast.xml &
+
+        # Stream fallback sink monitor to Icecast as MP3; restart on failure
+        (
+            until (echo > /dev/tcp/localhost/8000) 2>/dev/null; do sleep 0.5; done
+            while true; do
+                printf "Icecast: starting ffmpeg stream\n"
+                parec --device=fallback.monitor --raw --latency-msec=100 \
+                    | ffmpeg -loglevel warning \
+                        -fflags +nobuffer \
+                        -f s16le -ar 44100 -ac 2 -i pipe:0 \
+                        -c:a libmp3lame -b:a 128k \
+                        -flush_packets 1 \
+                        -f mp3 \
+                        "icecast://source:icecast@localhost:8000/stream.mp3" || true
+                sleep 5
+            done
+        ) &
+    fi
+fi
+
 # Start either TWS or IB Gateway
 if [[ -z ${GATEWAY_OR_TWS:-} ]]; then
     # Start TWS by default if not specified
