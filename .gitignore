@@ -5,3 +5,4 @@ compose.yml
 *.pyc
 *-settings
 __pycache__
+.idea/
