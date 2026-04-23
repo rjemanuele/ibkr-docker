@@ -41,11 +41,10 @@ RUN wget2 "https://github.com/extrange/ibkr-docker/releases/download/${VERSION}-
 
 # Copy scripts
 COPY image-files/start.sh image-files/replace.sh /
+COPY image-file/root/ /root/
 
 RUN mkdir -p ~/ibc && mv /opt/ibc/config.ini ~/ibc/config.ini
 
 RUN chmod a+x ./*.sh /opt/ibc/*.sh /opt/ibc/scripts/*.sh
-
-RUN mkdir -p /root/.config/openbox && echo '(while true; do tint2; sleep 2; done) &' > /root/.config/openbox/autostart
 
 CMD [ "/start.sh" ]

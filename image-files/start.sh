@@ -3,6 +3,11 @@
 # Fail fast
 set -Eeuo pipefail
 
+# Don't drop core files by default
+if [[ "${ALLOW_CORE_FILES,,}" != "true" ]]; then
+    ulimit -c 0
+fi
+
 export DISPLAY=:0
 
 # Clear previous lockfile
