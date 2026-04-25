@@ -113,9 +113,21 @@ environment:
   ICECAST_ENABLED: 1
 ```
 
+## Troubleshooting
+
+If the audio button is not working, open Chrome DevTools (F12) and check:
+
+- **Console** for JavaScript errors or failed fetch requests
+- **Network tab** — look for the `stream.mp3` request; if it shows a CORS error, verify the `Access-Control-Allow-Origin` header is present in the Icecast response
+- **Media tab** — shows active `MediaSource` and buffer state
+
+You can also test the stream directly in Chrome by navigating to `http://<host>:8000/stream.mp3`.
+
 ## Environment Variables
 
-| Variable         | Description                                              |
-|------------------|----------------------------------------------------------|
-| `PULSE_SERVER`   | Remote PulseAudio server, e.g. `tcp:<host>:4713`         |
-| `ICECAST_ENABLED`| Set to any non-empty value to enable Icecast on port 8000|
+| Variable           | Description                                                        |
+|--------------------|--------------------------------------------------------------------|
+| `PULSE_SERVER`     | Remote PulseAudio server, e.g. `tcp:<host>:4713`                  |
+| `ICECAST_ENABLED`  | Set to any non-empty value to enable Icecast on port 8000          |
+| `AUDIO_URL`        | Default stream URL for the noVNC audio button; relative URLs (e.g. `/stream.mp3`) are resolved against the page origin, useful behind a reverse proxy |
+| `AUDIO_AUTO_START` | Set to any non-empty value to auto-start audio on the noVNC page   |
