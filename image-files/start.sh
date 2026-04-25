@@ -15,6 +15,14 @@ export DISPLAY=:0
 # Clear previous lockfile
 rm -f /tmp/.X0-lock
 
+# Inject audio defaults into the noVNC index page
+_auto_audio=false; [[ -n "${AUDIO_AUTO_START:-}" ]] && _auto_audio=true
+sed -i \
+    -e "s|__AUDIO_URL__|${AUDIO_URL:-}|" \
+    -e "s|__AUTO_AUDIO__|${_auto_audio}|" \
+    /noVNC/index.html
+unset _auto_audio
+
 # Start VNC server
 Xvnc -SecurityTypes None -AlwaysShared=1 -geometry 1920x1080 :0 &
 

@@ -1,21 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <meta charset="utf-8">
     <title>TWS Docker</title>
     <style>
-      html,
-      body,
-      iframe {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        width: 100%;
-        border: 0;
-        overflow: hidden;
+      html, body, iframe {
+        margin: 0; padding: 0;
+        height: 100%; width: 100%;
+        border: 0; overflow: hidden;
       }
+      #audio-btn {
+        position: fixed;
+        bottom: 30px; right: 12px;
+        z-index: 9999;
+        transform: translateZ(0);
+        background: #1a1a1a;
+        color: #fff;
+        border: 1px solid #555;
+        border-radius: 4px;
+        padding: 5px 11px;
+        font: 13px/1.4 sans-serif;
+        cursor: pointer;
+        user-select: none;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      }
+      #audio-btn:hover { background: #333; }
     </style>
   </head>
   <body>
     <iframe src="vnc.html?autoconnect=true&resize=remote"></iframe>
+    <button id="audio-btn">🔊 Audio</button>
+    <script>
+    (function () {
+      const btn = document.getElementById('audio-btn');
+      let muted = false;
+
+      function reset() {
+        btn.textContent = '🔊 Audio';
+        btn.onclick = connect;
+      }
+
+      function connect() {
+        btn.textContent = '⏳ Connecting…';
+
+        const audio = new Audio();
+        const ms = new MediaSource();
+        audio.src = URL.createObjectURL(ms);
+
+        ms.addEventListener('sourceopen', () => {
+          if (!MediaSource.isTypeSupported('audio/mpeg')) {
+            btn.textContent = '❌ Unsupported';
+            return;
+          }
+
+          const sb = ms.addSourceBuffer('audio/mpeg');
+          const queue = [];
+          let busy = false;
+
+          function drain() {
+            if (busy || sb.updating || !queue.length) return;
+            busy = true;
+            sb.appendBuffer(queue.shift());
+          }
+
+          sb.addEventListener('updateend', () => { busy = false; drain(); });
+
+          // Trim old buffered data every 2s to stay near live
+          setInterval(() => {
+            if (!sb.updating && audio.currentTime > 1) {
+              try { sb.remove(0, audio.currentTime - 0.5); } catch (e) {}
+            }
+          }, 2000);
+
+          const params = new URLSearchParams(location.search);
+          const url = params.get('audioUrl')
+            || '__AUDIO_URL__'
+            || 'http://' + location.hostname + ':8000/stream.mp3';
+          fetch(url)
+            .then(r => {
+              if (!r.ok) throw new Error(r.status);
+              audio.play().catch(() => {
+                // Autoplay blocked — prompt user to click
+                btn.textContent = '▶ Click for audio';
+                btn.onclick = () => { audio.play(); btn.textContent = '🔊 Live'; btn.onclick = toggleMute; };
+              });
+              btn.textContent = '🔊 Live';
+              btn.onclick = toggleMute;
+              function toggleMute() {
+                muted = !muted;
+                audio.muted = muted;
+                btn.textContent = muted ? '🔇 Muted' : '🔊 Live';
+              }
+              const reader = r.body.getReader();
+              (function pump() {
+                reader.read()
+                  .then(({ value, done }) => {
+                    if (done) return reset();
+                    queue.push(value.buffer);
+                    drain();
+                    pump();
+                  })
+                  .catch(reset);
+              })();
+            })
+            .catch(reset);
+        });
+      }
+
+      btn.onclick = connect;
+
+      if (new URLSearchParams(location.search).has('autoAudio') || __AUTO_AUDIO__) connect();
+    })();
+    </script>
   </body>
 </html>
