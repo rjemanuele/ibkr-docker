@@ -4,7 +4,7 @@ name: Start detect-releases.yml
 
 on:
   schedule:
-    - cron: "0 8 * * *" # 8AM UTC daily
+    - cron: "0 10 * * *" # 10AM UTC daily, gives time for extrange to get his done
 
   workflow_dispatch:
 
