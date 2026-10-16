@@ -1,7 +1,7 @@
 name: "Build on Image Changes"
 
 # Builds both channels when image-files or Dockerfile.template change on any branch.
-# Tags include a branch suffix (e.g. 10.44.1e-latest-add-tint2) except on master.
+# Tags include a branch suffix (e.g. 10.44.1e-latest-add-tint2-1a2b3c4) except on master.
 
 on:
   push:
@@ -36,6 +36,7 @@ jobs:
         run: |
           name=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')
           echo "name=$name" >> $GITHUB_OUTPUT
+          echo "sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
           [[ "${GITHUB_REF_NAME}" == "master" ]] && echo "is_master=true" >> $GITHUB_OUTPUT || echo "is_master=false" >> $GITHUB_OUTPUT
 
       - name: Compute image tags
@@ -46,12 +47,13 @@ jobs:
           MAJOR_MINOR: ${{ steps.version.outputs.major_minor }}
           CHANNEL: ${{ matrix.channel }}
           BRANCH: ${{ steps.branch.outputs.name }}
+          SHA: ${{ steps.branch.outputs.sha }}
           IS_MASTER: ${{ steps.branch.outputs.is_master }}
         run: |
           if [[ "$IS_MASTER" == "true" ]]; then
             echo "tags=${IMAGE}:${VERSION}-${CHANNEL},${IMAGE}:${MAJOR_MINOR},${IMAGE}:${CHANNEL}" >> $GITHUB_OUTPUT
           else
-            echo "tags=${IMAGE}:${VERSION}-${CHANNEL}-${BRANCH},${IMAGE}:${MAJOR_MINOR}-${BRANCH},${IMAGE}:${CHANNEL}-${BRANCH}" >> $GITHUB_OUTPUT
+            echo "tags=${IMAGE}:${VERSION}-${CHANNEL}-${BRANCH}-${SHA},${IMAGE}:${MAJOR_MINOR}-${BRANCH},${IMAGE}:${CHANNEL}-${BRANCH}" >> $GITHUB_OUTPUT
           fi
 
       - name: Log in to Container Registry

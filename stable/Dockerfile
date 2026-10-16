@@ -1,15 +1,23 @@
 FROM debian:13@sha256:5cf544fad978371b3df255b61e209b373583cb88b733475c86e49faa15ac2104 AS setup
 
 ENV IBC_VERSION=3.22.0
+ENV TZ=UTC
 
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y \
-    ca-certificates git libxtst6 libgtk-3-0 openbox procps python3 socat tigervnc-standalone-server unzip wget2 xterm \
+    DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+    ca-certificates git libxtst6 libgtk-3-0 openbox procps python3 socat tigervnc-standalone-server unzip wget2 xterm tint2 tzdata \
     # https://github.com/extrange/ibkr-docker/issues/74
     libasound2 \
     libnss3 \
     libgbm1 \
-    libnspr4
+    libnspr4 \
+    # PulseAudio for audio transport to remote server
+    pulseaudio \
+    pulseaudio-utils \
+    libasound2-plugins \
+    # Icecast2 HTTP streaming server and ffmpeg encoder
+    ffmpeg \
+    icecast2
 
 # Setup noVNC for browser VNC access
 RUN git clone --depth 1 https://github.com/novnc/noVNC.git && \
@@ -24,25 +32,39 @@ RUN wget2 https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLi
     && unzip ibc.zip -d /opt/ibc \
     && rm ibc.zip
 
-ENV INSTALL_FILENAME="ibgateway-10.37.1q-standalone-linux-x64.sh"
+ENV INSTALL_FILENAME="ibgateway-10.50.1f-standalone-linux-x64.sh"
 
 # Fetch hashes
-RUN wget2 "https://github.com/extrange/ibkr-docker/releases/download/10.37.1q-stable/ibgateway-10.37.1q-standalone-linux-x64.sh.sha256" \
+RUN wget2 "https://github.com/rjemanuele/ibkr-docker/releases/download/10.50.1f-stable/ibgateway-10.50.1f-standalone-linux-x64.sh.sha256" \
     -O hash
 
 # Download IB Gateway (which contains TWS) and check hashes
-RUN wget2 "https://github.com/extrange/ibkr-docker/releases/download/10.37.1q-stable/ibgateway-10.37.1q-standalone-linux-x64.sh" \
+RUN wget2 "https://github.com/rjemanuele/ibkr-docker/releases/download/10.50.1f-stable/ibgateway-10.50.1f-standalone-linux-x64.sh" \
     -O "$INSTALL_FILENAME" \
     && sha256sum -c hash \
     && chmod +x "$INSTALL_FILENAME" \
     && yes '' | "./$INSTALL_FILENAME"  \
     && rm "$INSTALL_FILENAME"
 
-# Copy scripts
+# The installer records its temporary extraction dir as the JRE location, which
+# is gone once it exits. Point IBC at the JRE bundled in the installed product.
+RUN for cfg in /root/Jts/*/*/.install4j/inst_jre.cfg; do \
+        echo "$(dirname "$(dirname "$cfg")")/jre" > "$cfg"; \
+    done
+
+# Copy scripts and Icecast config template
 COPY image-files/start.sh image-files/replace.sh /
+COPY image-files/icecast.xml.tmpl /etc/icecast2/icecast.xml.tmpl
+COPY image-files/root/ /root/
 
 RUN mkdir -p ~/ibc && mv /opt/ibc/config.ini ~/ibc/config.ini
 
 RUN chmod a+x ./*.sh /opt/ibc/*.sh /opt/ibc/scripts/*.sh
+
+# Route ALSA audio through PulseAudio so Java/TWS audio uses PulseAudio
+RUN printf 'pcm.!default {\n    type pulse\n}\nctl.!default {\n    type pulse\n}\n' > /etc/asound.conf
+
+# Disable PulseAudio autospawn — start.sh manages the daemon manually
+RUN printf 'autospawn = no\ndaemon-binary = /usr/bin/pulseaudio\n' > /etc/pulse/client.conf
 
 CMD [ "/start.sh" ]
