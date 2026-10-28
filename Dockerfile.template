@@ -39,6 +39,12 @@ RUN wget2 "https://github.com/${REPO}/releases/download/${VERSION}-${CHANNEL}/ib
     && yes '' | "./$INSTALL_FILENAME"  \
     && rm "$INSTALL_FILENAME"
 
+# The installer records its temporary extraction dir as the JRE location, which
+# is gone once it exits. Point IBC at the JRE bundled in the installed product.
+RUN for cfg in /root/Jts/*/*/.install4j/inst_jre.cfg; do \
+        echo "$(dirname "$(dirname "$cfg")")/jre" > "$cfg"; \
+    done
+
 # Copy scripts
 COPY image-files/start.sh image-files/replace.sh /
 
