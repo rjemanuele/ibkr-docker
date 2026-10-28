@@ -29,7 +29,7 @@ docker run -d \
   -e USERNAME=your_username \
   -e PASSWORD=your_password \
   -e PULSE_SERVER=tcp:<remote-host>:4713 \
-  ghcr.io/extrange/ibkr:latest
+  ghcr.io/rjemanuele/ibkr:latest
 ```
 
 Or in `compose.yml`:
@@ -56,7 +56,7 @@ docker run -d \
   -e USERNAME=your_username \
   -e PASSWORD=your_password \
   -e ICECAST_ENABLED=1 \
-  ghcr.io/extrange/ibkr:latest
+  ghcr.io/rjemanuele/ibkr:latest
 ```
 
 Or in `compose.yml`:
@@ -64,7 +64,7 @@ Or in `compose.yml`:
 ```yml
 services:
   ibkr:
-    image: ghcr.io/extrange/ibkr
+    image: ghcr.io/rjemanuele/ibkr
     ports:
       - "127.0.0.1:6080:6080"
       - "127.0.0.1:8888:8888"
