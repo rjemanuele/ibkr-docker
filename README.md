@@ -18,6 +18,7 @@
     - [Do I need to download TWS separately?](#do-i-need-to-download-tws-separately)
     - [What ports does TWS/IB Gateway use internally?](#what-ports-does-twsib-gateway-use-internally)
     - [How do I configure the default login to paper/live trading?](#how-do-i-configure-the-default-login-to-paperlive-trading)
+    - [Chromium says the hardware lacks SSE3 (Apple Silicon)](#chromium-says-the-hardware-lacks-sse3-apple-silicon)
   - [Repository Architecture](#repository-architecture)
 
 <!-- Created by https://github.com/ekalinin/github-markdown-toc -->
@@ -168,6 +169,18 @@ There is no need to change the port for this image, as it automatically forwards
 ### How do I configure the default login to paper/live trading?
 
 Set the environment variable `IBC_TradingMode` to `paper` or `live`.
+
+### Chromium says the hardware lacks SSE3 (Apple Silicon)
+
+The image is amd64 only. On Apple Silicon it runs under emulation (Rosetta or QEMU), where `/proc/cpuinfo` is the host's ARM file with no x86 flags. Chromium reads it at startup and exits with `The hardware on this system lacks support for the sse3 instruction set`.
+
+Mount [`rosetta-cpuinfo`](rosetta-cpuinfo) over it (needs no extra privileges):
+
+```bash
+docker run ... -v "$PWD/rosetta-cpuinfo:/proc/cpuinfo:ro" ...
+```
+
+Only do this on Apple Silicon: it hides the real CPU from everything in the container. It isn't needed on x86 hosts. The file lies about the CPU, so it only lets Chromium start. It does not make anything faster. TWS itself crashed for me under Rosetta when the Daily Lineup window opened, so use an x86 host for anything beyond testing.
 
 ## Repository Architecture
 
