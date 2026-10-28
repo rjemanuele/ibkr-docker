@@ -16,6 +16,10 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: write # create installer releases
+  packages: write # push to ghcr.io
+
 jobs:
   build:
     name: Build ${{ inputs.channel }} ${{ inputs.version || '(current)' }}
@@ -35,6 +39,32 @@ jobs:
           echo "version=$ver" >> $GITHUB_OUTPUT
           echo "major_minor=$(echo "$ver" | sed 's/\([0-9]*\.[0-9]*\).*/\1/')" >> $GITHUB_OUTPUT
 
+      - name: Create installer release if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tag="${VERSION}-${CHANNEL}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists"
+            exit 0
+          fi
+
+          # IBKR only serves the current build, so a missing release can only
+          # be created for the current version.
+          current=$(./ibkr-version.sh "$CHANNEL")
+          if [[ "$current" != "$VERSION" ]]; then
+            echo "::error::Release $tag does not exist and IBKR currently serves $current, so it cannot be created."
+            exit 1
+          fi
+
+          dest="ibgateway-${VERSION}-standalone-linux-x64.sh"
+          curl -fsSL "https://download2.interactivebrokers.com/installers/ibgateway/${CHANNEL}-standalone/ibgateway-${CHANNEL}-standalone-linux-x64.sh" --output "$dest"
+          sha256sum "$dest" > "${dest}.sha256"
+          gh release create "$tag" -t "ibgateway ${tag}" "$dest" "${dest}.sha256"
+          rm -f "$dest" "${dest}.sha256"
+
       - name: Regenerate build context with current image-files
         run: ./build.sh ${{ inputs.channel }} ${{ steps.version.outputs.version }}
 
@@ -43,6 +73,7 @@ jobs:
         run: |
           name=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')
           echo "name=$name" >> $GITHUB_OUTPUT
+          echo "sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
           [[ "${GITHUB_REF_NAME}" == "master" ]] && echo "is_master=true" >> $GITHUB_OUTPUT || echo "is_master=false" >> $GITHUB_OUTPUT
 
       - name: Compute image tags
@@ -53,12 +84,13 @@ jobs:
           MAJOR_MINOR: ${{ steps.version.outputs.major_minor }}
           CHANNEL: ${{ inputs.channel }}
           BRANCH: ${{ steps.branch.outputs.name }}
+          SHA: ${{ steps.branch.outputs.sha }}
           IS_MASTER: ${{ steps.branch.outputs.is_master }}
         run: |
           if [[ "$IS_MASTER" == "true" ]]; then
             echo "tags=${IMAGE}:${VERSION}-${CHANNEL},${IMAGE}:${MAJOR_MINOR},${IMAGE}:${CHANNEL}" >> $GITHUB_OUTPUT
           else
-            echo "tags=${IMAGE}:${VERSION}-${CHANNEL}-${BRANCH},${IMAGE}:${MAJOR_MINOR}-${BRANCH},${IMAGE}:${CHANNEL}-${BRANCH}" >> $GITHUB_OUTPUT
+            echo "tags=${IMAGE}:${VERSION}-${CHANNEL}-${BRANCH}-${SHA},${IMAGE}:${MAJOR_MINOR}-${BRANCH},${IMAGE}:${CHANNEL}-${BRANCH}" >> $GITHUB_OUTPUT
           fi
 
       - name: Log in to Container Registry

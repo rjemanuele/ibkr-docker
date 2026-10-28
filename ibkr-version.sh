@@ -7,7 +7,7 @@
 #   ./ibkr-version.sh history [latest|stable] list versions from GitHub releases
 #
 # Override the GitHub repo used for history with IBKR_DOCKER_REPO=owner/repo.
-# Defaults to the origin remote of this repo, then extrange/ibkr-docker.
+# Defaults to the origin remote of this repo, then rjemanuele/ibkr-docker.
 
 set -euo pipefail
 
@@ -17,7 +17,7 @@ IBKR_BASE="https://download2.interactivebrokers.com/installers/ibgateway"
 detect_repo() {
     git remote get-url origin 2>/dev/null \
         | sed 's|.*github\.com[:/]\(.*\)\.git|\1|; s|.*github\.com[:/]\(.*\)|\1|' \
-        || echo "extrange/ibkr-docker"
+        || echo "rjemanuele/ibkr-docker"
 }
 
 fetch_current() {

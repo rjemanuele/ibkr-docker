@@ -3,4 +3,5 @@ compose.yml
 .pdm-python
 .venv
 *.pyc
+*-settings
 __pycache__
